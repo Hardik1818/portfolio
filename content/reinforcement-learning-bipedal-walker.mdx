@@ -1,0 +1,32 @@
+---
+title: "Training a 3D Bipedal Robot Walker with PPO in PyBullet"
+publishedAt: "2024-08-10"
+updatedAt: "2024-08-12"
+author: "Hardik Thapaliya"
+summary: "Exploring continuous action spaces, reward engineering, and stable locomotion using Proximal Policy Optimization (PPO)."
+image: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800&h=240&fit=crop"
+---
+
+Training a simulated bipedal robot to walk from scratch is one of the classic benchmarks in continuous control. In this experiment, we utilized **PyBullet Physics** and **Proximal Policy Optimization (PPO)** to learn dynamic locomotion policies.
+
+## 1. Defining the Continuous State & Action Space
+
+The agent receives a 32-dimensional observation vector including joint angles, angular velocities, foot contact sensors, and center-of-mass orientation quaternions. The action space consists of 6 continuous torque values applied to hip, knee, and ankle actuators.
+
+## 2. Reward Engineering for Stable Gait
+
+A naive forward velocity reward often causes the agent to fall forward or exploit simulator physics. We designed a multi-objective reward function penalizing excessive joint acceleration and favoring upright posture:
+
+```python title="sim/walker_env.py"
+def compute_reward(self, state, action):
+    forward_velocity = state.velocity[0]
+    drift_penalty = abs(state.velocity[1]) * 0.5
+    energy_penalty = np.sum(np.square(action)) * 0.001
+    upright_reward = 1.0 if state.torso_z > 0.8 else -1.0
+    
+    return forward_velocity - drift_penalty - energy_penalty + upright_reward
+```
+
+## 3. PPO Training Dynamics
+
+Using vectorized environments in PyBullet, the agent explored stable gaits across 2 million timesteps, converging on an efficient, balanced walking trajectory that recovers smoothly from external lateral perturbations.

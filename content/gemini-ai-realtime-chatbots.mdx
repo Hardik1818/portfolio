@@ -1,0 +1,56 @@
+---
+title: "Building Low-Latency AI Chatbots with Google Gemini API & Firebase"
+publishedAt: "2024-10-15"
+updatedAt: "2024-10-18"
+author: "Hardik Thapaliya"
+summary: "Implementing streaming token responses, conversation history persistence, and context injection with Google Gemini API and Firebase."
+image: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&h=240&fit=crop"
+---
+
+Modern conversational interfaces require more than simple request-response roundtrips. Users expect instantaneous token streaming, persistent cloud session history, and rich markdown rendering.
+
+## 1. Streaming Tokens with Google Gemini SDK
+
+By utilizing the Gemini streaming API, we can render partial responses to users immediately as tokens are generated, reducing perceived latency from seconds to milliseconds:
+
+```typescript title="lib/gemini.ts"
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+
+export async function* streamChatResponse(prompt: string, history: Message[]) {
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  
+  const chat = model.startChat({
+    history: history.map((m) => ({
+      role: m.sender === "user" ? "user" : "model",
+      parts: [{ text: m.text }],
+    })),
+  });
+
+  const result = await chat.sendMessageStream(prompt);
+
+  for await (const chunk of result.stream) {
+    yield chunk.text();
+  }
+}
+```
+
+## 2. Real-Time State Persistence with Firebase Firestore
+
+To provide continuous cross-device conversation state, messages are persisted in **Firebase Firestore** with optimistic client-side updates:
+
+```typescript title="hooks/useChat.ts"
+import { db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+
+export async function saveMessage(chatId: string, text: string, sender: "user" | "bot") {
+  await addDoc(collection(db, "chats", chatId, "messages"), {
+    text,
+    sender,
+    createdAt: serverTimestamp(),
+  });
+}
+```
+
+This ensures fast interactive experiences, robust failure recovery, and real-time synchronization across mobile and desktop devices.

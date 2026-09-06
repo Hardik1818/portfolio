@@ -1,0 +1,60 @@
+---
+title: "Building a Production Network Intrusion Detection System (NIDS) with Machine Learning"
+publishedAt: "2025-02-15"
+updatedAt: "2025-02-20"
+author: "Hardik Thapaliya"
+summary: "An end-to-end walkthrough of designing, training, and deploying a network intrusion detector using CSE-CIC-IDS2018, DuckDB, CTGAN, and Django."
+image: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&h=240&fit=crop"
+---
+
+Network intrusion detection systems (NIDS) are critical defense mechanisms in modern network security. In this project, we designed and built a full-stack machine learning intrusion detector capable of classifying network flows into **15 distinct classes** (1 Benign + 14 Attack categories) using **30 statistical features**.
+
+## 1. Data Engineering & Cleaning with DuckDB
+
+Training on the **CSE-CIC-IDS2018** dataset presented real-world data scaling challenges. The raw CSVs contained tens of millions of records with schema discrepancies, missing headers, and duplicate flows.
+
+```python title="pipeline/clean.py"
+import duckdb
+
+# Merge and deduplicate raw Parquet partitions
+con = duckdb.connect()
+query = """
+    CREATE OR REPLACE TABLE cleaned_traffic AS
+    SELECT DISTINCT * EXCLUDE (Timestamp)
+    FROM 'data/raw/*.parquet'
+    WHERE "Dst Port" IS NOT NULL
+      AND "Flow Duration" >= 0;
+"""
+con.execute(query)
+```
+
+## 2. Rebalancing Rare Attack Classes with CTGAN
+
+Network attack datasets suffer from extreme class imbalance—attacks like *Infiltration* or *SQL Injection* represent less than 0.1% of total traffic. Rather than simple SMOTE, we trained **Conditional Tabular GANs (CTGAN)** per rare class to generate synthetic samples that preserve multi-dimensional feature distributions.
+
+| Model | Macro-F1 (Raw) | Macro-F1 (with CTGAN) | Inference Time (ms) |
+|---|---|---|---|
+| **HistGradientBoosting** | 0.884 | **0.942** | **1.2 ms** |
+| **XGBoost** | 0.879 | **0.938** | 1.8 ms |
+| **MLP (Neural Net)** | 0.841 | **0.910** | 3.5 ms |
+
+## 3. Real-Time Packet Capture with Scapy
+
+To classify live traffic, we implemented an in-memory packet aggregator using **Scapy**. Bidirectional TCP/UDP flows are reconstructed dynamically and folded into 30 statistical metrics (inter-arrival times, payload byte counts, TCP flag ratios) matching the exact mathematical specification of CICFlowMeter before being scored by our production classifiers.
+
+```python title="live/sniffer.py"
+from scapy.all import sniff
+from predictor.ml import predict_flow
+
+def handle_packet(packet):
+    flow_key = extract_5tuple(packet)
+    flow = flow_table.get_or_create(flow_key)
+    flow.update(packet)
+    
+    if flow.is_expired():
+        features = calculate_30_features(flow)
+        prediction = predict_flow(features)
+        log_verdict(flow_key, prediction)
+```
+
+By coupling automated Optuna hyperparameter optimization with a lightweight Django web dashboard, the system provides both single-flow manual diagnostic tools and live packet monitoring capabilities in production.

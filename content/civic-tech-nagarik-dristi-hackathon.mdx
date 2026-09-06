@@ -1,0 +1,56 @@
+---
+title: "Architecting Nagarik Dristi: Building Civic Tech in 48 Hours"
+publishedAt: "2025-01-12"
+updatedAt: "2025-01-14"
+author: "Hardik Thapaliya"
+summary: "How we built a civic-tech platform for government project tracking and community issue reporting during KEC Hackathon 2024."
+image: "https://images.unsplash.com/photo-1577495508048-b635879837f1?w=800&h=240&fit=crop"
+---
+
+During the **KEC Hackathon 2024** (organized by Leapfrog Technology), our team set out to solve a major problem in local governance: the lack of transparency in public infrastructure projects and community issue tracking.
+
+In 48 hours, we designed and developed **Nagarik Dristi**, a full-stack civic-tech web platform connecting citizens with municipal development progress.
+
+## 1. System Architecture
+
+```
+[ Citizen Web UI / Next.js + Shadcn UI ]
+                  │
+                  ▼
+[ REST API / Node.js & Next.js Serverless ]
+      ├── Firebase Auth (Role-based: Citizen / Official)
+      ├── MongoDB & Mongoose (Projects, Votes, Reports)
+      └── Cloud Storage (Photo evidence & updates)
+```
+
+## 2. Key Engineering Challenges
+
+### Real-Time Issue Voting & Fraud Prevention
+To prevent duplicate upvoting and spam reports, we implemented cryptographic user verification and rate-limited endpoints:
+
+```typescript title="api/vote/route.ts"
+import { NextRequest, NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import { Issue } from "@/models/Issue";
+
+export async function POST(req: NextRequest) {
+  const { userId, issueId } = await req.json();
+  await connectDB();
+
+  const issue = await Issue.findById(issueId);
+  if (!issue) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  if (issue.voters.includes(userId)) {
+    return NextResponse.json({ error: "Already voted" }, { status: 400 });
+  }
+
+  issue.voters.push(userId);
+  issue.upvotes += 1;
+  await issue.save();
+
+  return NextResponse.json({ success: true, count: issue.upvotes });
+}
+```
+
+### Public Data Modules
+We structured public project timelines into distinct milestone nodes (Budget Allocated $\rightarrow$ Contractor Assigned $\rightarrow$ Groundwork $\rightarrow$ Inspection $\rightarrow$ Completed), allowing citizens to follow municipal accountability with transparent visual tracking.

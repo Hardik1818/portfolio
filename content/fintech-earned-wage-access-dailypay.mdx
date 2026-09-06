@@ -1,0 +1,47 @@
+---
+title: "Engineering Real-Time Salary Streaming for Earned Wage Access (EWA)"
+publishedAt: "2024-11-20"
+updatedAt: "2024-11-25"
+author: "Hardik Thapaliya"
+summary: "Designing a micro-accrual fintech frontend with second-by-second salary streaming, multi-wallet payouts, and custom framework-free CSS."
+image: "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=800&h=240&fit=crop"
+---
+
+Earned Wage Access (EWA) allows employees to withdraw their accrued earnings before payday instead of resorting to predatory short-term loans. Building **DailyPay Nepal** required designing an interface that makes money feel fluid, accessible, and transparent.
+
+## 1. High-Precision Accrual Calculation
+
+Rather than fetching static daily balances, we implemented a continuous client-side accrual ticker that calculates the exact per-second earnings based on the employee's contractual pay rate and working hours:
+
+```typescript title="hooks/useSalaryStream.ts"
+import { useState, useEffect } from "react";
+
+export function useSalaryStream(monthlySalary: number, workingDays: number = 22) {
+  const secondsInWorkMonth = workingDays * 8 * 3600;
+  const earningsPerSecond = monthlySalary / secondsInWorkMonth;
+
+  const [accrued, setAccrued] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAccrued((prev) => prev + earningsPerSecond * 0.1);
+    }, 100);
+
+    return () => clearInterval(timer);
+  }, [earningsPerSecond]);
+
+  return accrued;
+}
+```
+
+## 2. Multi-Role Architecture
+
+The platform provides dedicated, security-conscious interfaces for three distinct stakeholder personas:
+
+- **Employee Portal:** Interactive wage stream counter, instant transfer requests to local providers (**eSewa**, **Khalti**, Direct Bank Deposit), and transaction ledgers.
+- **Organization Portal:** Real-time liquidity burn rate, single & bulk-CSV employee onboarding, and unlock approval queues.
+- **Administrator Console:** Platform-wide compliance audit trails, fee configurations, and disbursement monitoring.
+
+## 3. Custom Neobank Design System
+
+To achieve maximum rendering speed and fluid responsiveness on mobile devices, we built the entire interface using **custom vanilla CSS variables** without third-party utility overhead, employing dark-mode glassmorphism and high-contrast typography tailored for financial clarity.
